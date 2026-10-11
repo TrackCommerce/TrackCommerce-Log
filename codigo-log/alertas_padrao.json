@@ -1,0 +1,11 @@
+{
+  "AlertasPadrao": [
+    { "componente": "CPU",              "unidade": "%",    "moderado": 70,  "critico": 90  },
+    { "componente": "Memoria RAM",      "unidade": "%",    "moderado": 75,  "critico": 90  },
+    { "componente": "Armazenamento",    "unidade": "%",    "moderado": 80,  "critico": 90  },
+    { "componente": "Leitura de Disco", "unidade": "MB/s", "moderado": 100, "critico": 200 },
+    { "componente": "Escrita de Disco", "unidade": "MB/s", "moderado": 100, "critico": 200 },
+    { "componente": "Rede - Download",  "unidade": "Mbps", "moderado": 500, "critico": 800 },
+    { "componente": "Rede - Upload",    "unidade": "Mbps", "moderado": 500, "critico": 800 }
+  ]
+}
