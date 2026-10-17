@@ -117,20 +117,20 @@ public class Config {
         config.setDbUrl(env("DB_URL", urlPadrao));
         config.setDbUser(env("DB_USER", "root"));
         config.setDbPass(env("DB_PASS", ""));
-        config.setAwsBucket(env("AWS_BUCKET", ""));
+        config.setAwsBucket(env("AWS_BUCKET", "track-commerce-gold-nicole"));
         config.setAwsRegion(env("AWS_REGION", "us-east-1"));
         config.setGoldPrefix(env("GOLD_PREFIX", "track-commerce/gold"));
-        config.setGoldDirLocal(env("GOLD_DIR_LOCAL", "/.track-commerce/gold"));
-        config.setAlertasJson(env("ALERTAS_JSON", "/.track-commerce/gold/alertas.json"));
+        config.setGoldDirLocal(env("GOLD_DIR_LOCAL", "/home/nicole/TrackCommerce-Captura/track-commerce/gold"));
+        config.setAlertasJson(env("ALERTAS_JSON", "/home/nicole/TrackCommerce-Captura/track-commerce/gold/alertas.json"));
         config.setAlertasPadraoJson(env("ALERTAS_PADRAO_JSON", "./alertas_padrao.json"));
         config.setJanelaMinutos(envInteiro("JANELA_MINUTOS", 15));
         config.setTelemetriaMaxMinutos(envInteiro("TELEMETRIA_MAX_MINUTOS", 30));
         config.setIntervaloMinutos(envInteiro("INTERVALO_MINUTOS", 60));
         config.setModoOffline(envBooleano("MODO_OFFLINE", false));
-        config.setUsarBanco(envBooleano("USAR_BANCO", true));
+        config.setUsarBanco(envBooleano("USAR_BANCO", false));
         config.setUsarS3(envBooleano("USAR_S3", true));
-        config.setUsarJira(envBooleano("USAR_JIRA", true));
-        config.setUsarSlack(envBooleano("USAR_SLACK", true));
+        config.setUsarJira(envBooleano("USAR_JIRA", false));
+        config.setUsarSlack(envBooleano("USAR_SLACK", false));
         return config;
     }
 
