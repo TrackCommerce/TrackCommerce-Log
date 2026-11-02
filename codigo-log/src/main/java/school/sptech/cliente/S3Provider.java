@@ -9,6 +9,13 @@ import software.amazon.awssdk.regions.Region;
 
 // AWS SDK v2 (s3): cliente que conversa com o Amazon S3 (listar, baixar, enviar arquivos).
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.io.IOException;
 
 // Configuração do projeto (variáveis de ambiente).
 import school.sptech.config.Config;
@@ -53,6 +60,30 @@ public class S3Provider {
                 .build();
     }
 
+    /** Recupera o histórico; se não existe no bucket, remove uma cópia local antiga. */
+    public boolean baixarSeExistir(String bucket, String chave, Path destino) throws IOException {
+        try (S3Client s3 = getS3Client()) {
+            try {
+                byte[] dados = s3.getObjectAsBytes(GetObjectRequest.builder()
+                        .bucket(bucket).key(chave).build()).asByteArray();
+                if (destino.getParent() != null) Files.createDirectories(destino.getParent());
+                Files.write(destino, dados);
+                return true;
+            } catch (NoSuchKeyException e) {
+                Files.deleteIfExists(destino);
+                return false;
+            }
+        }
+    }
+
+    /** Publica o JSON na Gold. Requer s3:PutObject. */
+    public void enviarJson(String bucket, String chave, Path origem) {
+        try (S3Client s3 = getS3Client()) {
+            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(chave)
+                    .contentType("application/json").build(), RequestBody.fromFile(origem));
+        }
+    }
+
     // ==================================================================
     // GETTERS & SETTERS
     // ==================================================================
@@ -71,8 +102,7 @@ public class S3Provider {
 
     @Override
     public String toString() {
-        return "S3Provider{credentials=" + credentials
-                + ", region=" + region + "}";
+        return "S3Provider{region=" + region + "}";
     }
 
 }

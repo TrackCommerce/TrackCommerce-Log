@@ -33,7 +33,7 @@ import school.sptech.util.Formatador;
  * Cria issues e comentários no Jira Cloud (REST API v2, autenticação Basic = e-mail:token).
  *
  * As credenciais (URL, e-mail, token e chave do projeto) vêm de cada Regra, pois cada empresa
- * pode ter o seu próprio Jira (tabela apijira).
+ * pode ter o seu próprio Jira (tabela integracao).
  */
 public class Jira {
 

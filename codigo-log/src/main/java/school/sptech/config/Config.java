@@ -7,11 +7,9 @@ import school.sptech.util.Formatador;
  * Toda a configuração do programa vem de VARIÁVEIS DE AMBIENTE (nada fixo no código).
  *
  * Modos de execução (todos opcionais - o programa roda mesmo sem nenhuma integração):
- *   MODO_OFFLINE=true -> não usa banco, nem S3, nem Jira, nem Slack (só a pasta Gold local).
  *   USAR_BANCO=false  -> não conecta ao MySQL (as regras vêm dos alertas padrão).
  *   USAR_S3=false     -> não lê do S3, mesmo com AWS_BUCKET preenchido.
  *   USAR_JIRA=false   -> não cria issues no Jira (apenas mostra o que seria criado).
- *   USAR_SLACK=false  -> não envia mensagens ao Slack (apenas mostra o que seria enviado).
  */
 public class Config {
 
@@ -42,6 +40,7 @@ public class Config {
 
     // Caminho do arquivo alertas.json gerado por este programa (ALERTAS_JSON).
     private String alertasJson;
+    private String alertasS3Key;
 
     // Caminho do arquivo opcional com alertas padrão (ALERTAS_PADRAO_JSON).
     private String alertasPadraoJson;
@@ -67,8 +66,6 @@ public class Config {
     // Permite criar issues no Jira (USAR_JIRA).
     private Boolean usarJira = true;
 
-    // Permite enviar mensagens ao Slack (USAR_SLACK).
-    private Boolean usarSlack = true;
 
     // ==================================================================
     // CONSTRUTORES
@@ -79,7 +76,7 @@ public class Config {
     }
 
     /** Construtor completo: recebe todos os atributos. */
-    public Config(String dbUrl, String dbUser, String dbPass, String awsBucket, String awsRegion, String goldPrefix, String goldDirLocal, String alertasJson, String alertasPadraoJson, Integer janelaMinutos, Integer telemetriaMaxMinutos, Integer intervaloMinutos, Boolean modoOffline, Boolean usarBanco, Boolean usarS3, Boolean usarJira, Boolean usarSlack) {
+    public Config(String dbUrl, String dbUser, String dbPass, String awsBucket, String awsRegion, String goldPrefix, String goldDirLocal, String alertasJson, String alertasPadraoJson, Integer janelaMinutos, Integer telemetriaMaxMinutos, Integer intervaloMinutos, Boolean modoOffline, Boolean usarBanco, Boolean usarS3, Boolean usarJira) {
         this.dbUrl = dbUrl;
         this.dbUser = dbUser;
         this.dbPass = dbPass;
@@ -96,7 +93,6 @@ public class Config {
         this.usarBanco = usarBanco;
         this.usarS3 = usarS3;
         this.usarJira = usarJira;
-        this.usarSlack = usarSlack;
     }
 
     // ==================================================================
@@ -117,11 +113,12 @@ public class Config {
         config.setDbUrl(env("DB_URL", urlPadrao));
         config.setDbUser(env("DB_USER", "root"));
         config.setDbPass(env("DB_PASS", ""));
-        config.setAwsBucket(env("AWS_BUCKET", "track-commerce-gold-nicole"));
+        config.setAwsBucket(env("AWS_BUCKET", ""));
         config.setAwsRegion(env("AWS_REGION", "us-east-1"));
         config.setGoldPrefix(env("GOLD_PREFIX", "track-commerce/gold"));
-        config.setGoldDirLocal(env("GOLD_DIR_LOCAL", "/home/nicole/TrackCommerce-Captura/track-commerce/gold"));
-        config.setAlertasJson(env("ALERTAS_JSON", "/home/nicole/TrackCommerce-Captura/track-commerce/gold/alertas.json"));
+        config.setGoldDirLocal(env("GOLD_DIR_LOCAL", "/TrackCommerce-Captura/track-commerce/gold"));
+        config.setAlertasJson(env("ALERTAS_JSON", "./track-commerce/gold/alertas.json"));
+        config.setAlertasS3Key(env("ALERTAS_S3_KEY", config.getGoldPrefix() + "/alertas.json"));
         config.setAlertasPadraoJson(env("ALERTAS_PADRAO_JSON", "./alertas_padrao.json"));
         config.setJanelaMinutos(envInteiro("JANELA_MINUTOS", 15));
         config.setTelemetriaMaxMinutos(envInteiro("TELEMETRIA_MAX_MINUTOS", 30));
@@ -130,7 +127,6 @@ public class Config {
         config.setUsarBanco(envBooleano("USAR_BANCO", false));
         config.setUsarS3(envBooleano("USAR_S3", true));
         config.setUsarJira(envBooleano("USAR_JIRA", false));
-        config.setUsarSlack(envBooleano("USAR_SLACK", false));
         return config;
     }
 
@@ -147,11 +143,6 @@ public class Config {
     /** O Jira só é acionado fora do modo offline e com USAR_JIRA ligado. */
     public Boolean jiraAtivo() {
         return !modoOffline && usarJira;
-    }
-
-    /** O Slack só é acionado fora do modo offline e com USAR_SLACK ligado. */
-    public Boolean slackAtivo() {
-        return !modoOffline && usarSlack;
     }
 
     /** Lê uma variável de ambiente de texto; se não existir (ou estiver vazia), devolve o padrão. */
@@ -263,6 +254,9 @@ public class Config {
         this.goldDirLocal = goldDirLocal;
     }
 
+    public String getAlertasS3Key() { return alertasS3Key; }
+    public void setAlertasS3Key(String chave) { this.alertasS3Key = chave; }
+
     public String getAlertasJson() {
         return alertasJson;
     }
@@ -335,14 +329,6 @@ public class Config {
         this.usarJira = usarJira;
     }
 
-    public Boolean getUsarSlack() {
-        return usarSlack;
-    }
-
-    public void setUsarSlack(Boolean usarSlack) {
-        this.usarSlack = usarSlack;
-    }
-
     // ==================================================================
     // TOSTRING
     // ==================================================================
@@ -364,8 +350,7 @@ public class Config {
                 + ", modoOffline=" + modoOffline
                 + ", usarBanco=" + usarBanco
                 + ", usarS3=" + usarS3
-                + ", usarJira=" + usarJira
-                + ", usarSlack=" + usarSlack + "}";
+                + ", usarJira=" + usarJira + "}";
     }
 
 }

@@ -14,7 +14,7 @@ import school.sptech.model.Regra;
  *
  * Descobre as máquinas olhando os arquivos do Gold local e aplica os alertas padrão a todos os
  * componentes suportados. É o plano B quando o MySQL está desativado ou inacessível.
- * Como não há tabela apijira, essas regras não têm Jira nem Slack.
+ * Como não há tabela integracao, essas regras não têm Jira.
  */
 public class RegraLocalService {
 
@@ -74,7 +74,6 @@ public class RegraLocalService {
                         padrao.getModerado(),
                         padrao.getCritico(),
                         null, null, null, null,      // sem Jira
-                        null,                        // sem Slack
                         true));
             }
         }

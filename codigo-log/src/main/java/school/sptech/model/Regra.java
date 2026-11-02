@@ -15,7 +15,7 @@ public class Regra {
     // ATRIBUTOS
     // ==================================================================
 
-    // Chave da tabela instancias_componentes (null no modo sem banco).
+    // Chave da tabela instancia_componente (null no modo sem banco).
     private Integer idInstanciaComponente;
 
     // Identificador da empresa (nome da pasta no Gold).
@@ -54,9 +54,6 @@ public class Regra {
     // Chave do projeto no Jira, ex.: TRK (pode ser null).
     private String jiraProjectKey;
 
-    // Webhook do Slack da empresa (pode ser null).
-    private String slackWebhook;
-
     // Verdadeiro quando os limites vieram dos alertas padrão (componente sem parâmetro vinculado).
     private Boolean padrao = false;
 
@@ -69,7 +66,7 @@ public class Regra {
     }
 
     /** Construtor completo: recebe todos os atributos. */
-    public Regra(Integer idInstanciaComponente, String empresaId, String empresaNome, String instancia, String identificador, String componente, String unidade, Double moderado, Double critico, String jiraUrl, String jiraEmail, String jiraToken, String jiraProjectKey, String slackWebhook, Boolean padrao) {
+    public Regra(Integer idInstanciaComponente, String empresaId, String empresaNome, String instancia, String identificador, String componente, String unidade, Double moderado, Double critico, String jiraUrl, String jiraEmail, String jiraToken, String jiraProjectKey, Boolean padrao) {
         this.idInstanciaComponente = idInstanciaComponente;
         this.empresaId = empresaId;
         this.empresaNome = empresaNome;
@@ -83,7 +80,6 @@ public class Regra {
         this.jiraEmail = jiraEmail;
         this.jiraToken = jiraToken;
         this.jiraProjectKey = jiraProjectKey;
-        this.slackWebhook = slackWebhook;
         this.padrao = padrao;
     }
 
@@ -217,14 +213,6 @@ public class Regra {
         this.jiraProjectKey = jiraProjectKey;
     }
 
-    public String getSlackWebhook() {
-        return slackWebhook;
-    }
-
-    public void setSlackWebhook(String slackWebhook) {
-        this.slackWebhook = slackWebhook;
-    }
-
     public Boolean getPadrao() {
         return padrao;
     }
@@ -252,7 +240,6 @@ public class Regra {
                 + ", jiraEmail=" + jiraEmail
                 + ", jiraToken=" + "****"
                 + ", jiraProjectKey=" + jiraProjectKey
-                + ", slackWebhook=" + "****"
                 + ", padrao=" + padrao + "}";
     }
 

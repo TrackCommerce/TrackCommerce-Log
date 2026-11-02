@@ -15,6 +15,11 @@
     </properties>
 
     <dependencies>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>1.12.0</version>
+        </dependency>
         <!-- AWS SDK v2 - Amazon S3: leitura do Gold gerado pelo ETL (opcional) -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
@@ -41,7 +46,7 @@
             <version>9.0.0</version>
         </dependency>
 
-        <!-- Jackson: converte JSON <-> objetos Java (Gold, alertas.json, Jira e Slack) -->
+        <!-- Jackson: converte JSON <-> objetos Java (Gold, alertas.json, Jira) -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>

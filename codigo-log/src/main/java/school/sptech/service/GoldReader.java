@@ -3,6 +3,15 @@ package school.sptech.service;
 // Jackson (jackson-databind): JsonNode é a árvore do JSON; ObjectMapper lê o arquivo Gold.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 // AWS SDK v2: SdkException é a exceção-base de qualquer falha do SDK (sem credenciais, sem rede, objeto inexistente...); S3Client lê o objeto; GetObjectRequest descreve qual objeto baixar.
 import software.amazon.awssdk.core.exception.SdkException;
@@ -118,36 +127,101 @@ public class GoldReader {
         return resultado.toString();
     }
 
-    /** Lê o Gold de uma máquina: tenta o S3 (se ativo) e, se não der, a pasta local. */
+    /**
+     * Prioridade: JSON Gold; caso não exista, CSV Silver da mesma máquina.
+     * Não faz fallback em erros de autenticação/permissão do S3, evitando analisar dados desatualizados.
+     */
     public JsonNode ler(String empresaId, String identificador) throws IOException {
         String pasta = nomeSeguro(empresaId);
-        String arquivo = nomeSeguro(normalizar(identificador)) + "_sistema.json";
+        String base = nomeSeguro(normalizar(identificador)) + "_sistema";
+        String chaveJson = config.getGoldPrefix() + "/" + pasta + "/" + base + ".json";
+        String prefixoSilver = System.getenv().getOrDefault("SILVER_PREFIX", "track-commerce/silver");
+        String chaveCsv = prefixoSilver.replaceAll("/+$", "") + "/" + pasta + "/" + base + ".csv";
 
         if (s3Client != null) {
-            String chave = config.getGoldPrefix() + "/" + pasta + "/" + arquivo;
-            try {
-                GetObjectRequest requisicao = GetObjectRequest.builder()
-                        .bucket(config.getAwsBucket())
-                        .key(chave)
-                        .build();
-                byte[] bytes = s3Client.getObjectAsBytes(requisicao).asByteArray();
-                return objectMapper.readTree(bytes);
-            } catch (SdkException e) {
-                // SdkException: erro do SDK da AWS - credenciais ausentes, bucket sem permissão, sem
-                // internet ou objeto inexistente (NoSuchKeyException). Não é fatal: tentamos a pasta local.
-                System.err.println("[AVISO S3] Falha ao ler " + chave + ": " + e.getMessage()
-                        + " -> tentando a pasta local.");
+            byte[] json = baixarSeExistir(chaveJson);
+            if (json != null) {
+                System.out.println("[METRICAS] JSON Gold: " + chaveJson);
+                return objectMapper.readTree(json);
             }
+            byte[] csv = baixarSeExistir(chaveCsv);
+            if (csv != null) {
+                System.out.println("[METRICAS] CSV Silver: " + chaveCsv);
+                return csvParaGold(new String(csv, StandardCharsets.UTF_8));
+            }
+            throw new IOException("Nenhum JSON Gold ou CSV Silver no S3: " + chaveJson + " | " + chaveCsv);
         }
-        return lerLocal(pasta, arquivo);
+
+        Path gold = Path.of(config.getGoldDirLocal(), pasta, base + ".json");
+        if (Files.isRegularFile(gold)) {
+            System.out.println("[METRICAS] JSON local: " + gold);
+            return objectMapper.readTree(Files.readAllBytes(gold));
+        }
+        String dirSilver = System.getenv().getOrDefault("SILVER_DIR_LOCAL",
+                Path.of(config.getGoldDirLocal()).resolveSibling("silver").toString());
+        Path silver = Path.of(dirSilver, pasta, base + ".csv");
+        if (Files.isRegularFile(silver)) {
+            System.out.println("[METRICAS] CSV local: " + silver);
+            return csvParaGold(Files.readString(silver, StandardCharsets.UTF_8));
+        }
+        throw new IOException("Sem JSON Gold ou CSV Silver local para " + identificador);
     }
 
-    /** Lê o Gold da pasta local: GOLD_DIR_LOCAL/<empresa>/<identificador>_sistema.json. */
-    private JsonNode lerLocal(String pasta, String arquivo) throws IOException {
-        Path caminho = Path.of(config.getGoldDirLocal(), pasta, arquivo);
-        // Files.readAllBytes lança NoSuchFileException (subclasse de IOException) se o arquivo não existir;
-        // quem chama trata e apenas pula a máquina sem Gold.
-        return objectMapper.readTree(Files.readAllBytes(caminho));
+    private byte[] baixarSeExistir(String chave) throws IOException {
+        try {
+            return s3Client.getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(config.getAwsBucket()).key(chave).build()).asByteArray();
+        } catch (NoSuchKeyException e) {
+            return null;
+        } catch (SdkException e) {
+            throw new IOException("Falha S3 ao ler " + chave + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Converte CSV Silver (;, cabeçalho) para o mesmo formato de historico usado pelo avaliador. */
+    private JsonNode csvParaGold(String conteudo) throws IOException {
+        ObjectNode raiz = objectMapper.createObjectNode();
+        for (String secao : new String[]{"cpu", "ram", "disco", "rede"}) {
+            raiz.putObject(secao).putArray("historico");
+        }
+        try (CSVParser parser = CSVFormat.DEFAULT.builder().setDelimiter(';')
+                .setHeader().setSkipHeaderRecord(true).setIgnoreSurroundingSpaces(true)
+                .build().parse(new StringReader(conteudo))) {
+            Map<String, Integer> colunas = parser.getHeaderMap();
+            if (!colunas.containsKey("timestamp")) {
+                throw new IOException("CSV sem coluna obrigatória timestamp");
+            }
+            for (CSVRecord linha : parser) {
+                String ts = linha.get("timestamp").trim();
+                try { LocalDateTime.parse(ts, FORMATO); }
+                catch (DateTimeParseException e) { continue; }
+                for (String secao : new String[]{"cpu", "ram", "disco", "rede"}) {
+                    ArrayNode historico = (ArrayNode) raiz.path(secao).path("historico");
+                    ObjectNode ponto = historico.addObject();
+                    ponto.put("timestamp", ts);
+                    for (String campo : camposDaSecao(secao)) {
+                        if (!colunas.containsKey(campo)) continue;
+                        String valor = linha.get(campo).trim();
+                        if (valor.isEmpty() || valor.equalsIgnoreCase("NA")) continue;
+                        try { ponto.put(campo, Double.parseDouble(valor)); }
+                        catch (NumberFormatException ignored) { /* célula inválida não gera alerta */ }
+                    }
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            throw new IOException("CSV Silver inválido: " + e.getMessage(), e);
+        }
+        return raiz;
+    }
+
+    private String[] camposDaSecao(String secao) {
+        return switch (secao) {
+            case "cpu" -> new String[]{"cpu_percent"};
+            case "ram" -> new String[]{"ram_percent"};
+            case "disco" -> new String[]{"disco_percent", "disco_leitura_bytes_s", "disco_escrita_bytes_s"};
+            case "rede" -> new String[]{"rede_download_bytes_s", "rede_upload_bytes_s"};
+            default -> new String[0];
+        };
     }
 
     /** Todos os registros do histórico da métrica, em ordem de tempo (pontos nulos ou inválidos são ignorados). */

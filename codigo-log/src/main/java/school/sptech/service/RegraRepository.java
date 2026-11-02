@@ -27,20 +27,18 @@ public class RegraRepository {
     // ATRIBUTOS
     // ==================================================================
 
-    // Consulta das regras. LEFT JOIN em parametros_alertas/parametros/apijira = esses dados são opcionais.
+    // Modelagem TrackCommerce atual: limites específicos por instância/componente.
     private static final String SQL_REGRAS = """
-            SELECT ic.id_instancia_componente, e.id_empresa, e.razao_social AS empresa_nome, i.nome AS instancia,
-                   i.identificador, c.nome AS componente, p.unidade_medida,
-                   pa.alerta_moderado, pa.alerta_critico,
-                   aj.jira_url, aj.jira_email, aj.codigo_api, aj.jira_project_key, aj.slack_webhook
-            FROM instancias_componentes ic
-            JOIN instancias i  ON i.id_instancia = ic.fk_instancia
-            JOIN empresa e     ON e.id_empresa = i.fk_empresa
-            JOIN componentes c ON c.id_componente = ic.fk_componentes
-            LEFT JOIN parametros_alertas pa ON pa.id_parametro_alerta = ic.fk_parametros_alertas
-            LEFT JOIN parametros p          ON p.id_parametro = pa.fk_parametro
-            LEFT JOIN apijira aj            ON aj.fk_empresa = e.id_empresa
-            WHERE ic.Status = 1 AND i.ativo = 1
+            SELECT ic.id_instancia_componente, e.id_empresa, e.razao_social AS empresa_nome,
+                   i.nome AS instancia, i.identificador, c.nome AS componente,
+                   c.unidade_medida, ic.alerta_moderado, ic.alerta_critico,
+                   ig.jira_url, ig.jira_email, ig.codigo_api, ig.jira_project_key
+            FROM instancia_componente ic
+            JOIN instancia i ON i.id_instancia = ic.fk_instancia
+            JOIN empresa e ON e.id_empresa = i.fk_empresa
+            JOIN componente c ON c.id_componente = ic.fk_componente
+            LEFT JOIN integracao ig ON ig.fk_empresa = e.id_empresa
+            WHERE ic.ativo = 1 AND i.ativo = 1
               AND c.nome IN ('CPU','Memoria RAM','Armazenamento',
                              'Leitura de Disco','Escrita de Disco',
                              'Rede - Download','Rede - Upload')
@@ -118,7 +116,6 @@ public class RegraRepository {
                     paraTexto(linha.get("jira_email")),
                     paraTexto(linha.get("codigo_api")),
                     paraTexto(linha.get("jira_project_key")),
-                    paraTexto(linha.get("slack_webhook")),
                     usouPadrao));
         }
         return regras;

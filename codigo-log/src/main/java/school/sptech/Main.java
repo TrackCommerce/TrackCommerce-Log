@@ -6,11 +6,12 @@ import org.springframework.dao.DataAccessException;
 // java.io / java.util: exceção de I/O e listas em memória.
 import java.io.IOException;
 import java.util.List;
+import java.nio.file.Path;
+import school.sptech.cliente.S3Provider;
 
 // Importando classes do próprio projeto (cada uma tem a sua responsabilidade explicada no topo do arquivo).
 import school.sptech.cliente.DBConnectionProvider;
 import school.sptech.cliente.Jira;
-import school.sptech.cliente.Slack;
 import school.sptech.config.Config;
 import school.sptech.model.Evento;
 import school.sptech.model.Nivel;
@@ -27,14 +28,14 @@ import school.sptech.util.Formatador;
  * Ponto de entrada do Track Commerce - Alertas.
  *
  * Lê o JSON Gold gerado pelo ETL, compara cada métrica com os limites de alerta e gera/atualiza o
- * arquivo alertas.json. Opcionalmente avisa o Slack e abre chamados no Jira.
+ * arquivo alertas.json. Opcionalmente abre chamados no Jira.
  *
  * Como executar:
  *   java -jar track-alertas.jar            -> executa UM ciclo e termina (use com cron/systemd)
  *   java -jar track-alertas.jar --loop     -> executa a cada INTERVALO_MINUTOS
- *   java -jar track-alertas.jar --offline  -> não usa banco, S3, Jira nem Slack (só a pasta Gold local)
+ *   java -jar track-alertas.jar --offline  -> não usa banco, S3 nem Jira (só a pasta Gold local)
  *
- * Todas as integrações são opcionais: se o MySQL, o S3, o Jira ou o Slack estiverem desligados ou
+ * Todas as integrações são opcionais: se o MySQL, o S3, o Jira estiverem desligados ou
  * inacessíveis, o programa avisa no console e continua com o que tiver disponível.
  *
  * Classe sem atributos: só tem métodos estáticos.
@@ -57,7 +58,7 @@ public class Main {
         }
 
         if (config.getModoOffline()) {
-            System.out.println("[MODO OFFLINE] Banco, S3, Jira e Slack desativados.");
+            System.out.println("[MODO OFFLINE] Banco, S3, Jira desativados.");
         }
 
         if (!modoLoop) {
@@ -89,7 +90,6 @@ public class Main {
             GoldReader goldReader = new GoldReader(config);
             AlertaPadraoRepository alertaPadraoRepository = new AlertaPadraoRepository(config);
             Jira jira = new Jira();
-            Slack slack = new Slack();
 
             // 1) Regras: do banco (quando disponível) ou dos alertas padrão aplicados às máquinas do Gold.
             List<Regra> regras = obterRegras(config, goldReader, alertaPadraoRepository);
@@ -100,6 +100,16 @@ public class Main {
                 }
             }
             System.out.println(regras.size() + " regra(s) ativa(s), " + comPadrao + " com limites padrão");
+
+            // Recupera o histórico da Gold antes de processar novos alertas.
+            // Erros de credencial/permissão interrompem o ciclo para evitar perda de histórico.
+            S3Provider s3Historico = config.s3Ativo() ? new S3Provider(config) : null;
+            if (s3Historico != null) {
+                Path local = Path.of(config.getAlertasJson());
+                boolean encontrado = s3Historico.baixarSeExistir(
+                        config.getAwsBucket(), config.getAlertasS3Key(), local);
+                System.out.println(encontrado ? "[S3] Histórico recuperado" : "[S3] Histórico ainda não existe");
+            }
 
             // 2) Atualiza o alertas.json (cria do zero ou fecha/abre alertas conforme o Gold).
             AlertaStore store = new AlertaStore(config.getAlertasJson());
@@ -113,12 +123,16 @@ public class Main {
             System.out.println(resultado.getAbertos().size() + " alerta(s) aberto(s) e "
                     + resultado.getEncerrados().size() + " encerrado(s) neste ciclo");
 
-            // 3) Notificações (Jira + Slack) - só para alertas que abriram e para os que normalizaram.
+            // 3) Notificações (Jira) - só para alertas que abriram e para os que normalizaram.
             for (Evento evento : resultado.getAbertos()) {
-                notificarAbertura(evento, config, jira, slack);
+                notificarAbertura(evento, config, jira);
             }
             for (Evento evento : resultado.getEncerrados()) {
-                notificarEncerramento(evento, config, slack);
+                System.out.println("[NORMALIZADO] " + evento.getRegra().getComponente() + " em " + evento.getRegra().getInstancia());
+            }
+            if (s3Historico != null) {
+                s3Historico.enviarJson(config.getAwsBucket(), config.getAlertasS3Key(), store.getArquivo());
+                System.out.println("[S3] Histórico publicado: " + config.getAlertasS3Key());
             }
         } catch (IOException e) {
             // IOException: falha ao ler/gravar o alertas.json (arquivo corrompido, sem permissão, disco cheio).
@@ -157,8 +171,8 @@ public class Main {
         return new RegraLocalService(goldReader, alertaPadraoRepository).gerarRegras();
     }
 
-    /** Alerta novo: abre issue no Jira (se possível) e avisa no Slack (se possível). */
-    private static void notificarAbertura(Evento evento, Config config, Jira jira, Slack slack) {
+    /** Alerta novo: abre issue no Jira quando configurado. */
+    private static void notificarAbertura(Evento evento, Config config, Jira jira) {
         Regra regra = evento.getRegra();
         String chaveJira = null;
 
@@ -181,45 +195,8 @@ public class Main {
                     + regra.getComponente() + " em " + regra.getInstancia());
         }
 
-        String icone = "🟠";
-        if (evento.getNivel() == Nivel.CRITICO) {
-            icone = "🔴";
-        }
-        String sufixoJira = "";
         if (chaveJira != null) {
-            sufixoJira = " — Jira " + chaveJira;
-        }
-        String mensagem = icone + " " + evento.getNivel().name() + ": " + regra.getComponente()
-                + " em " + regra.getInstancia()
-                + " (pico " + Formatador.decimal(evento.getValor(), 1) + " " + regra.getUnidade()
-                + ", limites " + Formatador.decimal(regra.getModerado(), 1)
-                + " / " + Formatador.decimal(regra.getCritico(), 1) + ")" + sufixoJira;
-        enviarSlack(mensagem, regra, config, slack);
-    }
-
-    /** Alerta que voltou ao normal: avisa no Slack. */
-    private static void notificarEncerramento(Evento evento, Config config, Slack slack) {
-        Regra regra = evento.getRegra();
-        String mensagem = "✅ Normalizado: " + regra.getComponente() + " em " + regra.getInstancia();
-        enviarSlack(mensagem, regra, config, slack);
-    }
-
-    /** Envia a mensagem ao Slack da empresa; se o Slack estiver desligado ou sem webhook, apenas mostra no console. */
-    private static void enviarSlack(String mensagem, Regra regra, Config config, Slack slack) {
-        if (config.slackAtivo() && !Formatador.textoVazio(regra.getSlackWebhook())) {
-            try {
-                slack.enviar(regra.getSlackWebhook(), mensagem);
-            } catch (IOException | InterruptedException | IllegalArgumentException e) {
-                // IOException: Slack fora do ar, sem internet ou webhook recusado (resposta diferente de 200).
-                // InterruptedException: a thread foi interrompida durante a requisição.
-                // IllegalArgumentException: a URL do webhook cadastrada no banco é inválida.
-                System.err.println("[AVISO] Falha ao notificar o Slack: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-                if (e instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        } else {
-            System.out.println("[SLACK DESATIVADO] " + mensagem);
+            System.out.println("[JIRA] Chamado criado: " + chaveJira);
         }
     }
 }
