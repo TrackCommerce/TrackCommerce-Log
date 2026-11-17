@@ -81,7 +81,7 @@ public class Jira {
         // Monta o corpo da requisição usando os DTOs (o Jackson transforma em JSON ao enviar).
         IssueFieldsDto campos = new IssueFieldsDto(
                 new ProjectDto(regra.getJiraProjectKey()),
-                new IssueTypeDto("Task"),
+                new IssueTypeDto("TrackCommerce-Alerts"),
                 new PriorityDto(nomePrioridade),
                 titulo,
                 descricao);
